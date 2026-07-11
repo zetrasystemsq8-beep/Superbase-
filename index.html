@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAI Knowledge Uploader</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 20px auto; padding: 0 15px; background: #0F1115; color: #eee; }
+  h1 { color: #008751; }
+  input, select, textarea, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; border-radius: 8px; border: 1px solid #444; background: #1a1d23; color: #eee; }
+  textarea { min-height: 200px; }
+  button { background: #008751; color: white; font-weight: bold; border: none; cursor: pointer; margin-top: 10px; }
+  button:disabled { opacity: 0.5; }
+  #status { margin-top: 15px; padding: 10px; border-radius: 8px; }
+  .success { background: #1b3a2b; }
+  .error { background: #3a1b1b; }
+  .chunk-preview { font-size: 12px; color: #999; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>NAI Knowledge Uploader</h1>
+<p>Paste any text (from a PDF, website, textbook — copy the text and paste here) and it'll be added to NAI's knowledge base.</p>
+
+<input type="password" id="passwordInput" placeholder="Site password">
+
+<input type="text" id="sourceName" placeholder="Source name (e.g. Nigerian Constitution)">
+<input type="text" id="sourceUrl" placeholder="Source URL (optional)">
+<input type="text" id="category" placeholder="Category (e.g. History, Government, Culture)">
+
+<textarea id="content" placeholder="Paste the full text content here..."></textarea>
+
+<button id="uploadBtn" onclick="uploadContent()">Break Into Chunks & Upload</button>
+
+<div id="status"></div>
+
+<script>
+  const SUPABASE_URL = 'https://rxxaccwqfboeibjhlawh.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4eGFjY3dxZmJvZWliamhsYXdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTI1OTMsImV4cCI6MjA5OTI4ODU5M30.a0WBtyRM8QhuX3VsvCUBUz9FP8rbEsCZIifSsKy_enI';
+  const SITE_PASSWORD = 'zetra2026'; // change this to whatever you want
+
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function chunkText(text, maxLength = 700) {
+    const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+    const chunks = [];
+    let current = '';
+
+    for (const para of paragraphs) {
+      if ((current + '\n\n' + para).length > maxLength && current.length > 0) {
+        chunks.push(current.trim());
+        current = para;
+      } else {
+        current = current ? current + '\n\n' + para : para;
+      }
+    }
+    if (current.trim().length > 0) chunks.push(current.trim());
+
+    return chunks;
+  }
+
+  async function uploadContent() {
+    const password = document.getElementById('passwordInput').value;
+    const status = document.getElementById('status');
+    const btn = document.getElementById('uploadBtn');
+
+    if (password !== SITE_PASSWORD) {
+      status.className = 'error';
+      status.textContent = 'Wrong password.';
+      return;
+    }
+
+    const sourceName = document.getElementById('sourceName').value.trim();
+    const sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const category = document.getElementById('category').value.trim();
+    const content = document.getElementById('content').value.trim();
+
+    if (!sourceName || !content) {
+      status.className = 'error';
+      status.textContent = 'Source name and content are required.';
+      return;
+    }
+
+    btn.disabled = true;
+    status.className = '';
+    status.textContent = 'Chunking and uploading...';
+
+    const chunks = chunkText(content);
+
+    try {
+      const rows = chunks.map(chunk => ({
+        source_name: sourceName,
+        source_url: sourceUrl || null,
+        category: category || 'General',
+        content: chunk
+      }));
+
+      const { error } = await client.from('nigeria_knowledge').insert(rows);
+
+      if (error) throw error;
+
+      status.className = 'success';
+      status.textContent = `Success! Uploaded ${chunks.length} chunk(s) to NAI's knowledge base.`;
+      document.getElementById('content').value = '';
+    } catch (e) {
+      status.className = 'error';
+      status.textContent = 'Error: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+</script>
+
+</body>
+  </html>
