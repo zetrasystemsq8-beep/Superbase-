@@ -5,48 +5,204 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NAI Knowledge Uploader</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-  body { font-family: sans-serif; max-width: 700px; margin: 20px auto; padding: 0 15px; background: #0F1115; color: #eee; }
-  h1 { color: #008751; }
-  input, select, textarea, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; border-radius: 8px; border: 1px solid #444; background: #1a1d23; color: #eee; }
-  textarea { min-height: 200px; }
-  button { background: #008751; color: white; font-weight: bold; border: none; cursor: pointer; margin-top: 10px; }
-  button:disabled { opacity: 0.5; }
-  #status { margin-top: 15px; padding: 10px; border-radius: 8px; }
-  .success { background: #1b3a2b; }
-  .error { background: #3a1b1b; }
-  .chunk-preview { font-size: 12px; color: #999; margin-top: 10px; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 24px 16px 60px;
+    background: #0F1115; color: #EAECEF;
+  }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; background: #008751; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+  h1 { font-size: 20px; margin: 0; }
+  .subtitle { color: #8A9199; font-size: 13px; margin-top: 2px; }
+
+  .card { background: #171A21; border: 1px solid #2A2E37; border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+
+  label { display: block; font-size: 12px; color: #8A9199; margin-bottom: 4px; margin-top: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+  label:first-child { margin-top: 0; }
+  input, textarea, select {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2A2E37;
+    background: #0F1115; color: #EAECEF; font-size: 14px; font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: #008751; }
+  textarea { min-height: 160px; resize: vertical; }
+
+  button {
+    width: 100%; padding: 14px; border-radius: 10px; border: none;
+    background: #008751; color: white; font-weight: 700; font-size: 15px;
+    cursor: pointer; margin-top: 18px; transition: opacity 0.15s;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #2A2E37; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .tab { flex: 1; padding: 10px; text-align: center; border-radius: 10px; background: #171A21; border: 1px solid #2A2E37; cursor: pointer; font-size: 13px; font-weight: 600; color: #8A9199; }
+  .tab.active { background: #008751; border-color: #008751; color: white; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  #status { margin-top: 14px; padding: 12px; border-radius: 10px; font-size: 13px; display: none; }
+  .success { background: rgba(0,135,81,0.15); border: 1px solid #008751; display: block !important; }
+  .error { background: rgba(220,53,69,0.15); border: 1px solid #dc3545; display: block !important; }
+
+  .pending-item { background: #0F1115; border: 1px solid #2A2E37; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .pending-meta { font-size: 11px; color: #8A9199; margin-bottom: 6px; }
+  .pending-content { font-size: 13px; color: #EAECEF; white-space: pre-wrap; max-height: 100px; overflow-y: auto; margin-bottom: 10px; }
+  .pending-actions { display: flex; gap: 8px; }
+  .pending-actions button { margin-top: 0; padding: 8px; font-size: 13px; }
+  .btn-approve { background: #008751; }
+  .btn-reject { background: #dc3545; }
+
+  .lock-screen { text-align: center; padding: 60px 20px; }
+  .hidden { display: none; }
+  small { color: #8A9199; font-size: 12px; }
 </style>
 </head>
 <body>
 
-<h1>NAI Knowledge Uploader</h1>
-<p>Paste any text (from a PDF, website, textbook — copy the text and paste here) and it'll be added to NAI's knowledge base.</p>
+<div id="lockScreen" class="lock-screen">
+  <div class="logo" style="margin: 0 auto 16px;">N</div>
+  <h1>NAI Knowledge Portal</h1>
+  <p class="subtitle" style="margin-bottom: 24px;">Enter password to continue</p>
+  <input type="password" id="passwordInput" placeholder="Password" style="max-width: 280px;">
+  <button style="max-width: 280px;" onclick="unlock()">Enter</button>
+</div>
 
-<input type="password" id="passwordInput" placeholder="Site password">
+<div id="mainApp" class="hidden">
+  <div class="header">
+    <div class="logo">N</div>
+    <div>
+      <h1>NAI Knowledge Portal</h1>
+      <div class="subtitle">Help NAI learn more about Nigeria</div>
+    </div>
+  </div>
 
-<input type="text" id="sourceName" placeholder="Source name (e.g. Nigerian Constitution)">
-<input type="text" id="sourceUrl" placeholder="Source URL (optional)">
-<input type="text" id="category" placeholder="Category (e.g. History, Government, Culture)">
+  <div class="tabs">
+    <div class="tab active" onclick="switchMainTab('submit')">Submit</div>
+    <div class="tab hidden" id="reviewTab" onclick="switchMainTab('review')">Review Queue</div>
+  </div>
 
-<textarea id="content" placeholder="Paste the full text content here..."></textarea>
+  <div id="mainpanel-submit" class="mainpanel">
+    <div class="card">
+      <label>Your name (so we know who submitted this)</label>
+      <input type="text" id="submitterName" placeholder="e.g. Chidi, Dev Team">
 
-<button id="uploadBtn" onclick="uploadContent()">Break Into Chunks & Upload</button>
+      <label>Source name</label>
+      <input type="text" id="sourceName" placeholder="e.g. Nigerian Constitution">
 
-<div id="status"></div>
+      <label>Category</label>
+      <input type="text" id="category" placeholder="e.g. History, Government, Culture">
 
+      <label>Source URL (optional)</label>
+      <input type="text" id="sourceUrl" placeholder="https://...">
+
+      <div class="tabs" style="margin-top: 16px;">
+        <div class="tab active" onclick="switchTab('text')">Paste Text</div>
+        <div class="tab" onclick="switchTab('pdf')">Upload PDF</div>
+        <div class="tab" onclick="switchTab('image')">Upload Image</div>
+        <div class="tab" onclick="switchTab('link')">From Link</div>
+      </div>
+
+      <div id="panel-text" class="panel active">
+        <label>Content</label>
+        <textarea id="content" placeholder="Paste text here..."></textarea>
+      </div>
+
+      <div id="panel-pdf" class="panel">
+        <label>Select a PDF file</label>
+        <input type="file" id="pdfFile" accept="application/pdf">
+        <small id="pdfStatus"></small>
+      </div>
+
+      <div id="panel-image" class="panel">
+        <label>Select an image (a photo of text, a page, a document)</label>
+        <input type="file" id="imageFile" accept="image/*">
+        <small>Text will be extracted automatically from the image using OCR.</small>
+        <small id="imageStatus" style="display:block; margin-top:6px;"></small>
+      </div>
+
+      <div id="panel-link" class="panel">
+        <label>Webpage link</label>
+        <input type="text" id="linkUrl" placeholder="https://en.wikipedia.org/wiki/...">
+        <small>Some sites block automatic fetching — if it fails, copy the text manually into the Paste Text tab instead.</small>
+      </div>
+
+      <button id="uploadBtn" onclick="submitContent()">Submit</button>
+      <div id="status"></div>
+    </div>
+  </div>
+
+  <div id="mainpanel-review" class="mainpanel hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <strong>Pending Submissions</strong>
+        <button class="secondary" style="width:auto; margin:0; padding:8px 14px; font-size:12px;" onclick="loadPending()">Refresh</button>
+      </div>
+      <div id="pendingList"><small>Loading...</small></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
   const SUPABASE_URL = 'https://rxxaccwqfboeibjhlawh.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4eGFjY3dxZmJvZWliamhsYXdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTI1OTMsImV4cCI6MjA5OTI4ODU5M30.a0WBtyRM8QhuX3VsvCUBUz9FP8rbEsCZIifSsKy_enI';
-  const SITE_PASSWORD = 'zetra2026'; // change this to whatever you want
+  const SITE_PASSWORD = 'connecttrain';
+  const ADMIN_PASSWORD = 'connectbaba145#145'; // only YOU should know this one — required to approve
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let activeTab = 'text';
+  let activeMainTab = 'submit';
+  let enteredPassword = '';
+
+  function unlock() {
+    const pw = document.getElementById('passwordInput').value;
+    if (pw !== SITE_PASSWORD && pw !== ADMIN_PASSWORD) {
+      alert('Wrong password.');
+      return;
+    }
+    enteredPassword = pw;
+    document.getElementById('lockScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+
+    // Only show the Review Queue tab to whoever enters the admin password.
+    if (pw === ADMIN_PASSWORD) {
+      document.getElementById('reviewTab').classList.remove('hidden');
+    }
+  }
+
+  function switchMainTab(tab) {
+    activeMainTab = tab;
+    document.querySelectorAll('.tabs')[0].querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tab === 'submit' ? null : 'reviewTab');
+    if (tab === 'submit') {
+      document.querySelectorAll('.tabs')[0].children[0].classList.add('active');
+    } else {
+      document.getElementById('reviewTab').classList.add('active');
+    }
+    document.getElementById('mainpanel-submit').classList.toggle('hidden', tab !== 'submit');
+    document.getElementById('mainpanel-review').classList.toggle('hidden', tab !== 'review');
+    if (tab === 'review') loadPending();
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    const tabRow = document.querySelectorAll('.tabs')[1];
+    tabRow.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const idx = { text: 0, pdf: 1, image: 2, link: 3 }[tab];
+    tabRow.children[idx].classList.add('active');
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + tab).classList.add('active');
+  }
 
   function chunkText(text, maxLength = 700) {
-    const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+    const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 20);
     const chunks = [];
     let current = '';
-
     for (const para of paragraphs) {
       if ((current + '\n\n' + para).length > maxLength && current.length > 0) {
         chunks.push(current.trim());
@@ -56,53 +212,105 @@
       }
     }
     if (current.trim().length > 0) chunks.push(current.trim());
-
     return chunks;
   }
 
-  async function uploadContent() {
-    const password = document.getElementById('passwordInput').value;
+  async function extractPdfText(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      document.getElementById('pdfStatus').textContent = `Reading page ${i} of ${pdf.numPages}...`;
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      fullText += textContent.items.map(item => item.str).join(' ') + '\n\n';
+    }
+    return fullText;
+  }
+
+  async function extractImageText(file) {
+    document.getElementById('imageStatus').textContent = 'Reading image (this can take a moment)...';
+    const result = await Tesseract.recognize(file, 'eng');
+    return result.data.text;
+  }
+
+  async function extractFromLink(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Could not fetch that link (status ' + response.status + ')');
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script, style, nav, header, footer').forEach(el => el.remove());
+    return (doc.body.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  async function submitContent() {
     const status = document.getElementById('status');
     const btn = document.getElementById('uploadBtn');
 
-    if (password !== SITE_PASSWORD) {
+    const submitterName = document.getElementById('submitterName').value.trim();
+    const sourceName = document.getElementById('sourceName').value.trim();
+    let sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const category = document.getElementById('category').value.trim();
+
+    if (!submitterName) {
       status.className = 'error';
-      status.textContent = 'Wrong password.';
+      status.textContent = 'Please enter your name.';
       return;
     }
-
-    const sourceName = document.getElementById('sourceName').value.trim();
-    const sourceUrl = document.getElementById('sourceUrl').value.trim();
-    const category = document.getElementById('category').value.trim();
-    const content = document.getElementById('content').value.trim();
-
-    if (!sourceName || !content) {
+    if (!sourceName) {
       status.className = 'error';
-      status.textContent = 'Source name and content are required.';
+      status.textContent = 'Source name is required.';
       return;
     }
 
     btn.disabled = true;
     status.className = '';
-    status.textContent = 'Chunking and uploading...';
-
-    const chunks = chunkText(content);
+    status.textContent = 'Processing...';
 
     try {
+      let content = '';
+
+      if (activeTab === 'text') {
+        content = document.getElementById('content').value.trim();
+        if (!content) throw new Error('Please paste some text first.');
+      } else if (activeTab === 'pdf') {
+        const file = document.getElementById('pdfFile').files[0];
+        if (!file) throw new Error('Please select a PDF file first.');
+        content = await extractPdfText(file);
+      } else if (activeTab === 'image') {
+        const file = document.getElementById('imageFile').files[0];
+        if (!file) throw new Error('Please select an image first.');
+        content = await extractImageText(file);
+      } else if (activeTab === 'link') {
+        const link = document.getElementById('linkUrl').value.trim();
+        if (!link) throw new Error('Please paste a link first.');
+        content = await extractFromLink(link);
+        if (!sourceUrl) sourceUrl = link;
+      }
+
+      if (!content || content.length < 20) throw new Error('No readable text found.');
+
+      status.textContent = 'Uploading...';
+      const chunks = chunkText(content);
+
       const rows = chunks.map(chunk => ({
         source_name: sourceName,
         source_url: sourceUrl || null,
         category: category || 'General',
-        content: chunk
+        content: chunk,
+        submitted_by: submitterName,
+        status: 'pending'
       }));
 
-      const { error } = await client.from('nigeria_knowledge').insert(rows);
-
+      const { error } = await client.from('nigeria_knowledge_pending').insert(rows);
       if (error) throw error;
 
       status.className = 'success';
-      status.textContent = `Success! Uploaded ${chunks.length} chunk(s) to NAI's knowledge base.`;
+      status.textContent = `Success! ${chunks.length} chunk(s) uploaded to NAI's knowledge base.`;
       document.getElementById('content').value = '';
+      document.getElementById('linkUrl').value = '';
+      document.getElementById('pdfFile').value = '';
+      document.getElementById('imageFile').value = '';
     } catch (e) {
       status.className = 'error';
       status.textContent = 'Error: ' + e.message;
@@ -110,7 +318,76 @@
       btn.disabled = false;
     }
   }
+
+  async function loadPending() {
+    const list = document.getElementById('pendingList');
+    list.innerHTML = '<small>Loading...</small>';
+
+    const { data, error } = await client
+      .from('nigeria_knowledge_pending')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      list.innerHTML = '<small>Error loading queue.</small>';
+      return;
+    }
+    if (!data || data.length === 0) {
+      list.innerHTML = '<small>No pending submissions.</small>';
+      return;
+    }
+
+    list.innerHTML = data.map(item => `
+      <div class="pending-item">
+        <div class="pending-meta"><strong>${item.source_name}</strong> · ${item.category} · by ${item.submitted_by || 'unknown'}</div>
+        <div class="pending-content">${item.content.slice(0, 300)}${item.content.length > 300 ? '...' : ''}</div>
+        <div class="pending-actions">
+          <button class="btn-approve" onclick="approveItem('${item.id}')">Approve</button>
+          <button class="btn-reject" onclick="rejectItem('${item.id}')">Reject</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function requireAdmin() {
+    if (enteredPassword !== ADMIN_PASSWORD) {
+      alert('Only the admin password can approve/reject submissions.');
+      return false;
+    }
+    return true;
+  }
+
+  async function approveItem(id) {
+    if (!requireAdmin()) return;
+
+    const { data: item, error: fetchError } = await client
+      .from('nigeria_knowledge_pending')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !item) { alert('Could not load item.'); return; }
+
+    const { error: insertError } = await client.from('nigeria_knowledge').insert({
+      source_name: item.source_name,
+      source_url: item.source_url,
+      category: item.category,
+      content: item.content
+    });
+
+    if (insertError) { alert('Error approving: ' + insertError.message); return; }
+
+    await client.from('nigeria_knowledge_pending').update({ status: 'approved' }).eq('id', id);
+    loadPending();
+  }
+
+  async function rejectItem(id) {
+    if (!requireAdmin()) return;
+    await client.from('nigeria_knowledge_pending').update({ status: 'rejected' }).eq('id', id);
+    loadPending();
+  }
 </script>
 
 </body>
-  </html>
+</html>
