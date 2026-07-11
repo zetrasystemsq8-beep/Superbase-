@@ -29,6 +29,14 @@
   input:focus, textarea:focus { outline: none; border-color: #008751; }
   textarea { min-height: 160px; resize: vertical; }
 
+  .password-wrap { position: relative; }
+  .password-wrap input { padding-right: 44px; }
+  .toggle-eye {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; width: auto; padding: 4px; margin: 0;
+    cursor: pointer; color: #8A9199; font-size: 16px;
+  }
+
   button {
     width: 100%; padding: 14px; border-radius: 10px; border: none;
     background: #008751; color: white; font-weight: 700; font-size: 15px;
@@ -46,6 +54,12 @@
   #status { margin-top: 14px; padding: 12px; border-radius: 10px; font-size: 13px; display: none; }
   .success { background: rgba(0,135,81,0.15); border: 1px solid #008751; display: block !important; }
   .error { background: rgba(220,53,69,0.15); border: 1px solid #dc3545; display: block !important; }
+
+  .progress-wrap { margin-top: 14px; display: none; }
+  .progress-wrap.show { display: block; }
+  .progress-label { font-size: 12px; color: #8A9199; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .progress-bar-track { width: 100%; height: 8px; background: #2A2E37; border-radius: 4px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: #008751; width: 0%; transition: width 0.2s ease; }
 
   .pending-item { background: #0F1115; border: 1px solid #2A2E37; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
   .pending-meta { font-size: 11px; color: #8A9199; margin-bottom: 6px; }
@@ -66,8 +80,11 @@
   <div class="logo" style="margin: 0 auto 16px;">N</div>
   <h1>NAI Knowledge Portal</h1>
   <p class="subtitle" style="margin-bottom: 24px;">Enter password to continue</p>
-  <input type="password" id="passwordInput" placeholder="Password" style="max-width: 280px;">
-  <button style="max-width: 280px;" onclick="unlock()">Enter</button>
+  <div class="password-wrap" style="max-width: 280px; margin: 0 auto;">
+    <input type="password" id="passwordInput" placeholder="Password">
+    <button type="button" class="toggle-eye" onclick="togglePasswordView('passwordInput', this)">👁</button>
+  </div>
+  <button style="max-width: 280px; margin-top: 12px;" onclick="unlock()">Enter</button>
 </div>
 
 <div id="mainApp" class="hidden">
@@ -113,14 +130,12 @@
       <div id="panel-pdf" class="panel">
         <label>Select a PDF file</label>
         <input type="file" id="pdfFile" accept="application/pdf">
-        <small id="pdfStatus"></small>
       </div>
 
       <div id="panel-image" class="panel">
         <label>Select an image (a photo of text, a page, a document)</label>
         <input type="file" id="imageFile" accept="image/*">
         <small>Text will be extracted automatically from the image using OCR.</small>
-        <small id="imageStatus" style="display:block; margin-top:6px;"></small>
       </div>
 
       <div id="panel-link" class="panel">
@@ -130,6 +145,17 @@
       </div>
 
       <button id="uploadBtn" onclick="submitContent()">Submit</button>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label">
+          <span id="progressLabel">Processing...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+      </div>
+
       <div id="status"></div>
     </div>
   </div>
@@ -149,15 +175,25 @@
 <script>
   const SUPABASE_URL = 'https://rxxaccwqfboeibjhlawh.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4eGFjY3dxZmJvZWliamhsYXdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTI1OTMsImV4cCI6MjA5OTI4ODU5M30.a0WBtyRM8QhuX3VsvCUBUz9FP8rbEsCZIifSsKy_enI';
-  const SITE_PASSWORD = 'connecttrain';
-  const ADMIN_PASSWORD = 'connectbaba145#145'; // only YOU should know this one — required to approve
+  const SITE_PASSWORD = 'zetra2026';
+  const ADMIN_PASSWORD = 'zetraowner2026'; // only YOU should know this one — required to approve
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   let activeTab = 'text';
-  let activeMainTab = 'submit';
   let enteredPassword = '';
+
+  function togglePasswordView(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      btn.textContent = '👁';
+    }
+  }
 
   function unlock() {
     const pw = document.getElementById('passwordInput').value;
@@ -168,22 +204,14 @@
     enteredPassword = pw;
     document.getElementById('lockScreen').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
-
-    // Only show the Review Queue tab to whoever enters the admin password.
     if (pw === ADMIN_PASSWORD) {
       document.getElementById('reviewTab').classList.remove('hidden');
     }
   }
 
   function switchMainTab(tab) {
-    activeMainTab = tab;
-    document.querySelectorAll('.tabs')[0].querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.getElementById(tab === 'submit' ? null : 'reviewTab');
-    if (tab === 'submit') {
-      document.querySelectorAll('.tabs')[0].children[0].classList.add('active');
-    } else {
-      document.getElementById('reviewTab').classList.add('active');
-    }
+    document.querySelectorAll('.tabs')[0].children[0].classList.toggle('active', tab === 'submit');
+    document.getElementById('reviewTab').classList.toggle('active', tab === 'review');
     document.getElementById('mainpanel-submit').classList.toggle('hidden', tab !== 'submit');
     document.getElementById('mainpanel-review').classList.toggle('hidden', tab !== 'review');
     if (tab === 'review') loadPending();
@@ -197,6 +225,22 @@
     tabRow.children[idx].classList.add('active');
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     document.getElementById('panel-' + tab).classList.add('active');
+  }
+
+  function showProgress(label) {
+    document.getElementById('progressWrap').classList.add('show');
+    document.getElementById('progressLabel').textContent = label;
+    setProgress(0);
+  }
+
+  function setProgress(percent, label) {
+    document.getElementById('progressFill').style.width = percent + '%';
+    document.getElementById('progressPercent').textContent = Math.round(percent) + '%';
+    if (label) document.getElementById('progressLabel').textContent = label;
+  }
+
+  function hideProgress() {
+    document.getElementById('progressWrap').classList.remove('show');
   }
 
   function chunkText(text, maxLength = 700) {
@@ -219,27 +263,41 @@
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
+    showProgress(`Reading PDF (0/${pdf.numPages} pages)`);
     for (let i = 1; i <= pdf.numPages; i++) {
-      document.getElementById('pdfStatus').textContent = `Reading page ${i} of ${pdf.numPages}...`;
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       fullText += textContent.items.map(item => item.str).join(' ') + '\n\n';
+      setProgress((i / pdf.numPages) * 100, `Reading PDF (${i}/${pdf.numPages} pages)`);
     }
     return fullText;
   }
 
   async function extractImageText(file) {
-    document.getElementById('imageStatus').textContent = 'Reading image (this can take a moment)...';
-    const result = await Tesseract.recognize(file, 'eng');
+    showProgress('Reading image (0%)');
+    const result = await Tesseract.recognize(file, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          setProgress(pct, `Reading image (${pct}%)`);
+        } else if (m.status) {
+          setProgress(0, m.status.charAt(0).toUpperCase() + m.status.slice(1) + '...');
+        }
+      }
+    });
     return result.data.text;
   }
 
   async function extractFromLink(url) {
+    showProgress('Fetching page...');
+    setProgress(30);
     const response = await fetch(url);
     if (!response.ok) throw new Error('Could not fetch that link (status ' + response.status + ')');
+    setProgress(70, 'Extracting text...');
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
     doc.querySelectorAll('script, style, nav, header, footer').forEach(el => el.remove());
+    setProgress(100);
     return (doc.body.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
   }
 
@@ -265,7 +323,7 @@
 
     btn.disabled = true;
     status.className = '';
-    status.textContent = 'Processing...';
+    status.textContent = '';
 
     try {
       let content = '';
@@ -273,6 +331,8 @@
       if (activeTab === 'text') {
         content = document.getElementById('content').value.trim();
         if (!content) throw new Error('Please paste some text first.');
+        showProgress('Processing text...');
+        setProgress(100);
       } else if (activeTab === 'pdf') {
         const file = document.getElementById('pdfFile').files[0];
         if (!file) throw new Error('Please select a PDF file first.');
@@ -290,7 +350,7 @@
 
       if (!content || content.length < 20) throw new Error('No readable text found.');
 
-      status.textContent = 'Uploading...';
+      setProgress(100, 'Uploading to NAI...');
       const chunks = chunkText(content);
 
       const rows = chunks.map(chunk => ({
@@ -305,6 +365,7 @@
       const { error } = await client.from('nigeria_knowledge_pending').insert(rows);
       if (error) throw error;
 
+      hideProgress();
       status.className = 'success';
       status.textContent = `Success! ${chunks.length} chunk(s) uploaded to NAI's knowledge base.`;
       document.getElementById('content').value = '';
@@ -312,6 +373,7 @@
       document.getElementById('pdfFile').value = '';
       document.getElementById('imageFile').value = '';
     } catch (e) {
+      hideProgress();
       status.className = 'error';
       status.textContent = 'Error: ' + e.message;
     } finally {
